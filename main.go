@@ -4,6 +4,8 @@ import (
     "fmt"
     "os"
     tea "github.com/charmbracelet/bubbletea"
+    "github.com/openai/openai-go"
+    openai_option "github.com/openai/openai-go/option"
 )
 
 type Secrets struct {
@@ -16,7 +18,8 @@ type ChatMessages struct {
 }
 
 type Chat struct {
-    messages []ChatMessages
+    Messages []ChatMessages
+    Client   openai.Client
 }
 
 func main() {
@@ -28,11 +31,38 @@ func main() {
     secrets := Secrets{
         OpenaiApiKey: apiKey,
     }
-    fmt.Printf("OpenAI API Key: %s\n", secrets.OpenaiApiKey)
+    // API key loaded successfully (not printing for security)
 
-    chat := Chat{}
+    // Initialize OpenAI client
+    client := openai.NewClient(openai_option.WithAPIKey(secrets.OpenaiApiKey))
+
+    chat := Chat{
+        Client: client,
+    }
+    
+    // Start the bubble tea program
+    p := tea.NewProgram(chat)
+    if _, err := p.Run(); err != nil {
+        fmt.Printf("Error running program: %v\n", err)
+        os.Exit(1)
+    }
 }
 
 func (c Chat) Init() tea.Cmd {
     return nil
+}
+
+func (c Chat) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+    switch msg := msg.(type) {
+    case tea.KeyMsg:
+        switch msg.String() {
+        case "ctrl+c":
+            return c, tea.Quit
+        }
+    }
+    return c, nil
+}
+
+func (c Chat) View() string {
+    return "LLM Chat TUI\n\nPress Ctrl+C to quit"
 }
