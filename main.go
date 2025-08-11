@@ -9,6 +9,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/openai/openai-go"
 	openai_option "github.com/openai/openai-go/option"
+	"github.com/openai/openai-go/packages/ssestream"
 	"os"
 	"strings"
 )
@@ -25,12 +26,17 @@ type ChatMessages struct {
 // Custom message types for bubble tea
 type streamChunkMsg struct {
 	content string
+	stream  *ssestream.Stream[openai.ChatCompletionChunk]
 }
 
 type streamCompleteMsg struct{}
 
 type streamErrorMsg struct {
 	err error
+}
+
+type streamNextMsg struct {
+	stream *ssestream.Stream[openai.ChatCompletionChunk]
 }
 
 type Chat struct {
@@ -41,7 +47,7 @@ type Chat struct {
 	Width          int
 	Height         int
 	isStreaming    bool
-	currentMessage strings.Builder
+	currentMessage *strings.Builder
 }
 
 func main() {
@@ -73,7 +79,7 @@ func main() {
 		TextInput:      ti,
 		Viewport:       vp,
 		isStreaming:    false,
-		currentMessage: strings.Builder{},
+		currentMessage: &strings.Builder{},
 	}
 
 	// Start the bubble tea program with full screen mode and mouse support
@@ -85,12 +91,12 @@ func main() {
 }
 
 // sendMessage sends the chat messages to OpenAI and returns a command for streaming
-func (c Chat) sendMessage() tea.Cmd {
+func (c *Chat) sendMessage() tea.Cmd {
 	return tea.Batch(c.startStreaming())
 }
 
-// startStreaming creates multiple commands to handle real-time streaming
-func (c Chat) startStreaming() tea.Cmd {
+// startStreaming creates a command to handle streaming
+func (c *Chat) startStreaming() tea.Cmd {
 	return func() tea.Msg {
 		// Convert ChatMessages to OpenAI format
 		var messages []openai.ChatCompletionMessageParamUnion
@@ -108,26 +114,25 @@ func (c Chat) startStreaming() tea.Cmd {
 			Model:    openai.ChatModelGPT4oMini,
 		})
 
-		// Process stream and collect all content for now
-		// TODO: Implement true real-time streaming with channels if needed
-		var fullContent strings.Builder
-		for stream.Next() {
+		// Get the first chunk and trigger streaming loop
+		return streamNextMsg{stream: stream}
+	}
+}
+
+// streamNext gets the next chunk from the stream
+func streamNext(stream *ssestream.Stream[openai.ChatCompletionChunk]) tea.Cmd {
+	return func() tea.Msg {
+		if stream.Next() {
 			chunk := stream.Current()
 			if len(chunk.Choices) > 0 && chunk.Choices[0].Delta.Content != "" {
-				fullContent.WriteString(chunk.Choices[0].Delta.Content)
+				return streamChunkMsg{content: chunk.Choices[0].Delta.Content, stream: stream}
 			}
+			// If this chunk has no content, immediately get the next one
+			return streamNext(stream)()
 		}
 
 		if err := stream.Err(); err != nil {
 			return streamErrorMsg{err: err}
-		}
-
-		// Return both the content and completion message
-		if fullContent.Len() > 0 {
-			// We need to send both the content and completion
-			// But since we can only return one message, let's send the content
-			// and let the handler send the completion
-			return streamChunkMsg{content: fullContent.String()}
 		}
 
 		return streamCompleteMsg{}
@@ -303,7 +308,7 @@ func (c Chat) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				content = c.renderMessages()
 				c.Viewport.SetContent(content)
 				c.Viewport.GotoBottom()
-				return c, c.sendMessage()
+				return c, (&c).sendMessage()
 			}
 			return c, nil
 		case "up", "down", "pgup", "pgdown", "home", "end":
@@ -317,15 +322,18 @@ func (c Chat) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			c.TextInput, cmd = c.TextInput.Update(msg)
 			return c, cmd
 		}
+	case streamNextMsg:
+		// Start or continue streaming - get the first/next chunk
+		return c, streamNext(msg.stream)
 	case streamChunkMsg:
 		// Handle streaming response chunk
 		c.currentMessage.WriteString(msg.content)
-		// Update viewport content immediately for streaming
+		// Update viewport content immediately
 		content := c.renderMessages()
 		c.Viewport.SetContent(content)
 		c.Viewport.GotoBottom()
-		// After receiving content, send completion message
-		return c, func() tea.Msg { return streamCompleteMsg{} }
+		// Continue streaming - get the next chunk
+		return c, streamNext(msg.stream)
 	case streamCompleteMsg:
 		// Handle streaming completion
 		if c.currentMessage.Len() > 0 {
