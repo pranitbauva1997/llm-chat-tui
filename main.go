@@ -189,8 +189,19 @@ func (c Chat) renderMessages() string {
 		leftPadding = (terminalWidth - messageHistoryWidth) / 2
 	}
 
-	for _, msg := range c.Messages {
+	for i, msg := range c.Messages {
 		messageText := msg.Content
+		isFirstMessage := i == 0
+
+		// Add simple character divider for all messages except the first one
+		if !isFirstMessage {
+			dividerText := strings.Repeat("─", messageHistoryWidth)
+			centeredDivider := lipgloss.NewStyle().
+				Width(terminalWidth).
+				PaddingLeft(leftPadding).
+				Render(dividerText)
+			messageLines = append(messageLines, centeredDivider)
+		}
 
 		// Style messages based on role
 		switch msg.Role {
@@ -244,6 +255,16 @@ func (c Chat) renderMessages() string {
 
 	// Show current streaming message if streaming
 	if c.isStreaming {
+		// Add divider before streaming message if there are existing messages
+		if len(c.Messages) > 0 {
+			dividerText := strings.Repeat("─", messageHistoryWidth)
+			centeredDivider := lipgloss.NewStyle().
+				Width(terminalWidth).
+				PaddingLeft(leftPadding).
+				Render(dividerText)
+			messageLines = append(messageLines, centeredDivider)
+		}
+
 		streamingText := c.currentMessage.String()
 		if streamingText == "" {
 			streamingText = "..."
