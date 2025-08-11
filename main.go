@@ -3,6 +3,9 @@ package main
 import (
 	"context"
 	"fmt"
+	"os"
+	"strings"
+
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/bubbles/viewport"
@@ -11,8 +14,6 @@ import (
 	"github.com/openai/openai-go"
 	openai_option "github.com/openai/openai-go/option"
 	"github.com/openai/openai-go/packages/ssestream"
-	"os"
-	"strings"
 )
 
 type Secrets struct {
@@ -97,7 +98,7 @@ func main() {
 	// Initialize spinner
 	s := spinner.New()
 	s.Spinner = spinner.Dot
-	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("205"))
+	s.Style = spinnerStyle
 
 	chat := Chat{
 		Client:         client,
@@ -196,10 +197,7 @@ func (c Chat) renderMessages() string {
 		// Add simple character divider for all messages except the first one
 		if !isFirstMessage {
 			dividerText := strings.Repeat("─", messageHistoryWidth)
-			centeredDivider := lipgloss.NewStyle().
-				Width(terminalWidth).
-				PaddingLeft(leftPadding).
-				Render(dividerText)
+			centeredDivider := centerHorizontallyWithPadding(terminalWidth, leftPadding).Render(dividerText)
 			messageLines = append(messageLines, centeredDivider)
 		}
 
@@ -207,45 +205,21 @@ func (c Chat) renderMessages() string {
 		switch msg.Role {
 		case RoleUser:
 			// User messages on the right
-			userStyle := lipgloss.NewStyle().
-				Padding(0, 1).
-				MarginRight(2).
-				Width(len(messageText) + 2).
-				Align(lipgloss.Right)
-
-			userMessage := userStyle.Render(messageText)
+			userMessage := createUserMessageBubble(messageText).Render(messageText)
 			// Right align the entire message within the constrained width
-			rightAligned := lipgloss.NewStyle().
-				Width(messageHistoryWidth).
-				Align(lipgloss.Right).
-				Render(userMessage)
+			rightAligned := rightAlignInContainer(messageHistoryWidth).Render(userMessage)
 
 			// Center the entire message container
-			centeredMessage := lipgloss.NewStyle().
-				Width(terminalWidth).
-				PaddingLeft(leftPadding).
-				Render(rightAligned)
+			centeredMessage := centerHorizontallyWithPadding(terminalWidth, leftPadding).Render(rightAligned)
 			messageLines = append(messageLines, centeredMessage)
 		case RoleAssistant:
 			// Assistant messages on the left
-			assistantStyle := lipgloss.NewStyle().
-				Padding(0, 1).
-				MarginLeft(2).
-				Width(len(messageText) + 2).
-				Align(lipgloss.Left)
-
-			assistantMessage := assistantStyle.Render(messageText)
+			assistantMessage := createAssistantMessageBubble(messageText).Render(messageText)
 			// Left align the entire message within the constrained width
-			leftAligned := lipgloss.NewStyle().
-				Width(messageHistoryWidth).
-				Align(lipgloss.Left).
-				Render(assistantMessage)
+			leftAligned := leftAlignInContainer(messageHistoryWidth).Render(assistantMessage)
 
 			// Center the entire message container
-			centeredMessage := lipgloss.NewStyle().
-				Width(terminalWidth).
-				PaddingLeft(leftPadding).
-				Render(leftAligned)
+			centeredMessage := centerHorizontallyWithPadding(terminalWidth, leftPadding).Render(leftAligned)
 			messageLines = append(messageLines, centeredMessage)
 		}
 
@@ -258,10 +232,7 @@ func (c Chat) renderMessages() string {
 		// Add divider before streaming message if there are existing messages
 		if len(c.Messages) > 0 {
 			dividerText := strings.Repeat("─", messageHistoryWidth)
-			centeredDivider := lipgloss.NewStyle().
-				Width(terminalWidth).
-				PaddingLeft(leftPadding).
-				Render(dividerText)
+			centeredDivider := centerHorizontallyWithPadding(terminalWidth, leftPadding).Render(dividerText)
 			messageLines = append(messageLines, centeredDivider)
 		}
 
@@ -273,24 +244,12 @@ func (c Chat) renderMessages() string {
 		}
 
 		// Assistant messages on the left with streaming indicator
-		assistantStyle := lipgloss.NewStyle().
-			Padding(0, 1).
-			MarginLeft(2).
-			Width(len(streamingText) + 2).
-			Align(lipgloss.Left)
-
-		assistantMessage := assistantStyle.Render(streamingText)
+		assistantMessage := createAssistantMessageBubble(streamingText).Render(streamingText)
 		// Left align the entire message within the constrained width
-		leftAligned := lipgloss.NewStyle().
-			Width(messageHistoryWidth).
-			Align(lipgloss.Left).
-			Render(assistantMessage)
+		leftAligned := leftAlignInContainer(messageHistoryWidth).Render(assistantMessage)
 
 		// Center the entire message container
-		centeredMessage := lipgloss.NewStyle().
-			Width(terminalWidth).
-			PaddingLeft(leftPadding).
-			Render(leftAligned)
+		centeredMessage := centerHorizontallyWithPadding(terminalWidth, leftPadding).Render(leftAligned)
 		messageLines = append(messageLines, centeredMessage)
 		messageLines = append(messageLines, "")
 	}
@@ -464,13 +423,8 @@ func (c Chat) View() string {
 		}
 
 		var layoutComponents []string
-		titleStyle := lipgloss.NewStyle().
-			Bold(true).
-			Border(lipgloss.RoundedBorder()).
-			Padding(0, 2).
-			Align(lipgloss.Center)
 		title := titleStyle.Render("LLM Chat TUI")
-		centeredTitle := lipgloss.NewStyle().Width(width).Align(lipgloss.Center).MarginTop(1).Render(title)
+		centeredTitle := centerHorizontally(width).Copy().MarginTop(1).Render(title)
 		layoutComponents = append(layoutComponents, centeredTitle)
 		layoutComponents = append(layoutComponents, "")
 		layoutComponents = append(layoutComponents, strings.Join(topSpacing, "\n"))
@@ -480,35 +434,22 @@ func (c Chat) View() string {
 			spinnerText := c.Spinner.View() + " Typing..."
 			// Calculate padding to align spinner with left edge of input text
 			inputWidth := min(width-4, 80) // Same calculation as TextInput width
-			leftPadding := (width - inputWidth) / 2
-			spinnerStyled := lipgloss.NewStyle().
-				Width(width).
-				PaddingLeft(leftPadding).
-				Align(lipgloss.Left).
-				Render(spinnerText)
+			spinnerStyled := alignSpinnerWithInput(width, inputWidth).Render(spinnerText)
 			layoutComponents = append(layoutComponents, spinnerStyled)
 			layoutComponents = append(layoutComponents, "")
 		}
 
-		inputStyle := lipgloss.NewStyle().
-			Border(lipgloss.RoundedBorder()).
-			Padding(0, 1)
-		styledInput := inputStyle.Render(c.TextInput.View())
-		layoutComponents = append(layoutComponents, lipgloss.NewStyle().Width(width).Align(lipgloss.Center).Render(styledInput))
+		styledInput := inputBoxStyle.Render(c.TextInput.View())
+		layoutComponents = append(layoutComponents, centerHorizontally(width).Render(styledInput))
 		layoutComponents = append(layoutComponents, "")
-		layoutComponents = append(layoutComponents, lipgloss.NewStyle().Width(width).Align(lipgloss.Center).MarginBottom(1).Render(statusMsg))
+		layoutComponents = append(layoutComponents, centerHorizontally(width).Copy().MarginBottom(1).Render(statusMsg))
 
 		layout = lipgloss.JoinVertical(lipgloss.Left, layoutComponents...)
 	} else {
 		// Keep input at bottom when messages exist
 		var layoutComponents []string
-		titleStyle := lipgloss.NewStyle().
-			Bold(true).
-			Border(lipgloss.RoundedBorder()).
-			Padding(0, 2).
-			Align(lipgloss.Center)
 		title := titleStyle.Render("LLM Chat TUI")
-		centeredTitle := lipgloss.NewStyle().Width(width).Align(lipgloss.Center).MarginTop(1).Render(title)
+		centeredTitle := centerHorizontally(width).Copy().MarginTop(1).Render(title)
 		layoutComponents = append(layoutComponents, centeredTitle)
 		layoutComponents = append(layoutComponents, "")
 		layoutComponents = append(layoutComponents, c.Viewport.View()) // Use viewport for scrollable messages
@@ -519,23 +460,15 @@ func (c Chat) View() string {
 			spinnerText := c.Spinner.View() + " Typing..."
 			// Calculate padding to align spinner with left edge of input text
 			inputWidth := min(width-4, 80) // Same calculation as TextInput width
-			leftPadding := (width - inputWidth) / 2
-			spinnerStyled := lipgloss.NewStyle().
-				Width(width).
-				PaddingLeft(leftPadding).
-				Align(lipgloss.Left).
-				Render(spinnerText)
+			spinnerStyled := alignSpinnerWithInput(width, inputWidth).Render(spinnerText)
 			layoutComponents = append(layoutComponents, spinnerStyled)
 			layoutComponents = append(layoutComponents, "")
 		}
 
-		inputStyle := lipgloss.NewStyle().
-			Border(lipgloss.RoundedBorder()).
-			Padding(0, 1)
-		styledInput := inputStyle.Render(c.TextInput.View())
-		layoutComponents = append(layoutComponents, lipgloss.NewStyle().Width(width).Align(lipgloss.Center).Render(styledInput))
+		styledInput := inputBoxStyle.Render(c.TextInput.View())
+		layoutComponents = append(layoutComponents, centerHorizontally(width).Render(styledInput))
 		layoutComponents = append(layoutComponents, "")
-		layoutComponents = append(layoutComponents, lipgloss.NewStyle().Width(width).Align(lipgloss.Center).MarginBottom(1).Render(statusMsg))
+		layoutComponents = append(layoutComponents, centerHorizontally(width).Copy().MarginBottom(1).Render(statusMsg))
 
 		layout = lipgloss.JoinVertical(lipgloss.Left, layoutComponents...)
 	}
