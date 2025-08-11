@@ -256,113 +256,126 @@ func (c Chat) renderMessages() string {
 	return strings.Join(messageLines, "\n")
 }
 
+func (c *Chat) updateViewportContent() {
+	content := c.renderMessages()
+	c.Viewport.SetContent(content)
+	c.Viewport.GotoBottom()
+}
+
+func (c *Chat) sendUserMessage(inputValue string) tea.Cmd {
+	c.Messages = append(c.Messages, ChatMessages{
+		Role:    "user",
+		Content: inputValue,
+	})
+	c.updateViewportContent()
+	c.TextInput.SetValue("")
+	c.isStreaming = true
+	c.currentMessage.Reset()
+	c.updateViewportContent()
+	return c.sendMessage()
+}
+
+func (c *Chat) handleWindowSizeMsg(msg tea.WindowSizeMsg) (Chat, tea.Cmd) {
+	c.Width = msg.Width
+	c.Height = msg.Height
+	c.TextInput.Width = min(c.Width-4, 80)
+	viewportHeight := c.Height - 6
+	c.Viewport.Width = c.Width
+	c.Viewport.Height = viewportHeight
+	return *c, nil
+}
+
+func (c *Chat) handleMouseMsg(msg tea.MouseMsg) (Chat, tea.Cmd) {
+	if msg.Action == tea.MouseActionPress && (msg.Button == tea.MouseButtonWheelUp || msg.Button == tea.MouseButtonWheelDown) {
+		var cmd tea.Cmd
+		c.Viewport, cmd = c.Viewport.Update(msg)
+		return *c, cmd
+	}
+	return *c, nil
+}
+
+func (c *Chat) handleKeyMsg(msg tea.KeyMsg) (Chat, tea.Cmd) {
+	switch msg.String() {
+	case "ctrl+c":
+		return *c, tea.Quit
+	case "enter":
+		inputValue := c.TextInput.Value()
+		if inputValue != "" && !c.isStreaming {
+			return *c, c.sendUserMessage(inputValue)
+		}
+		return *c, nil
+	case "up", "down", "pgup", "pgdown", "home", "end":
+		var cmd tea.Cmd
+		c.Viewport, cmd = c.Viewport.Update(msg)
+		return *c, cmd
+	}
+
+	if !c.isStreaming {
+		var cmd tea.Cmd
+		c.TextInput, cmd = c.TextInput.Update(msg)
+		return *c, cmd
+	}
+	return *c, nil
+}
+
+func (c *Chat) handleStreamNextMsg(msg streamNextMsg) (Chat, tea.Cmd) {
+	return *c, streamNext(msg.stream)
+}
+
+func (c *Chat) handleStreamChunkMsg(msg streamChunkMsg) (Chat, tea.Cmd) {
+	c.currentMessage.WriteString(msg.content)
+	c.updateViewportContent()
+	return *c, streamNext(msg.stream)
+}
+
+func (c *Chat) handleStreamCompleteMsg(msg streamCompleteMsg) (Chat, tea.Cmd) {
+	if c.currentMessage.Len() > 0 {
+		c.Messages = append(c.Messages, ChatMessages{
+			Role:    "assistant",
+			Content: c.currentMessage.String(),
+		})
+		c.currentMessage.Reset()
+	}
+	c.isStreaming = false
+	c.updateViewportContent()
+	return *c, c.TextInput.Focus()
+}
+
+func (c *Chat) handleStreamErrorMsg(msg streamErrorMsg) (Chat, tea.Cmd) {
+	c.Messages = append(c.Messages, ChatMessages{
+		Role:    "assistant",
+		Content: fmt.Sprintf("Error: %v", msg.err),
+	})
+	c.isStreaming = false
+	return *c, c.TextInput.Focus()
+}
+
 func (c Chat) Init() tea.Cmd {
 	return nil
 }
 
 func (c Chat) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	var cmd tea.Cmd
+	chatPtr := &c
 
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
-		c.Width = msg.Width
-		c.Height = msg.Height
-		// Update text input width to be responsive
-		c.TextInput.Width = min(c.Width-4, 80) // Leave some margin, max 80 chars
-		// Update viewport dimensions - reserve space for input and status
-		viewportHeight := c.Height - 6 // Reserve space for title, input, and status
-		c.Viewport.Width = c.Width
-		c.Viewport.Height = viewportHeight
-		return c, nil
+		return chatPtr.handleWindowSizeMsg(msg)
 	case tea.MouseMsg:
-		// Handle mouse wheel events for viewport scrolling using new API
-		if msg.Action == tea.MouseActionPress && (msg.Button == tea.MouseButtonWheelUp || msg.Button == tea.MouseButtonWheelDown) {
-			c.Viewport, cmd = c.Viewport.Update(msg)
-			return c, cmd
-		}
-		// For other mouse events, let them pass through
-		return c, nil
+		return chatPtr.handleMouseMsg(msg)
 	case tea.KeyMsg:
-		switch msg.String() {
-		case "ctrl+c":
-			return c, tea.Quit
-		case "enter":
-			// Handle message submission
-			inputValue := c.TextInput.Value()
-			if inputValue != "" && !c.isStreaming {
-				// Add user message to chat history
-				c.Messages = append(c.Messages, ChatMessages{
-					Role:    "user",
-					Content: inputValue,
-				})
-				// Update viewport content immediately
-				content := c.renderMessages()
-				c.Viewport.SetContent(content)
-				c.Viewport.GotoBottom()
-				// Clear the input
-				c.TextInput.SetValue("")
-				// Set streaming state and send to OpenAI
-				c.isStreaming = true
-				c.currentMessage.Reset()
-				// Update viewport to show streaming indicator immediately
-				content = c.renderMessages()
-				c.Viewport.SetContent(content)
-				c.Viewport.GotoBottom()
-				return c, (&c).sendMessage()
-			}
-			return c, nil
-		case "up", "down", "pgup", "pgdown", "home", "end":
-			// Handle viewport scrolling
-			c.Viewport, cmd = c.Viewport.Update(msg)
-			return c, cmd
-		}
-
-		// Let the text input handle other keys when not streaming
-		if !c.isStreaming {
-			c.TextInput, cmd = c.TextInput.Update(msg)
-			return c, cmd
-		}
+		return chatPtr.handleKeyMsg(msg)
 	case streamNextMsg:
-		// Start or continue streaming - get the first/next chunk
-		return c, streamNext(msg.stream)
+		return chatPtr.handleStreamNextMsg(msg)
 	case streamChunkMsg:
-		// Handle streaming response chunk
-		c.currentMessage.WriteString(msg.content)
-		// Update viewport content immediately
-		content := c.renderMessages()
-		c.Viewport.SetContent(content)
-		c.Viewport.GotoBottom()
-		// Continue streaming - get the next chunk
-		return c, streamNext(msg.stream)
+		return chatPtr.handleStreamChunkMsg(msg)
 	case streamCompleteMsg:
-		// Handle streaming completion
-		if c.currentMessage.Len() > 0 {
-			// Add the complete assistant message
-			c.Messages = append(c.Messages, ChatMessages{
-				Role:    "assistant",
-				Content: c.currentMessage.String(),
-			})
-			c.currentMessage.Reset()
-		}
-		c.isStreaming = false
-		// Update viewport content immediately to clear streaming indicator
-		content := c.renderMessages()
-		c.Viewport.SetContent(content)
-		c.Viewport.GotoBottom()
-		// Re-focus the text input after streaming is complete
-		return c, c.TextInput.Focus()
+		return chatPtr.handleStreamCompleteMsg(msg)
 	case streamErrorMsg:
-		// Handle streaming error
-		c.Messages = append(c.Messages, ChatMessages{
-			Role:    "assistant",
-			Content: fmt.Sprintf("Error: %v", msg.err),
-		})
-		c.isStreaming = false
-		// Re-focus the text input after error
-		return c, c.TextInput.Focus()
+		return chatPtr.handleStreamErrorMsg(msg)
 	}
 
 	// For non-key messages (like window resize), always update the text input
+	var cmd tea.Cmd
 	c.TextInput, cmd = c.TextInput.Update(msg)
 	return c, cmd
 }
