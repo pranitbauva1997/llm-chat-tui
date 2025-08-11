@@ -376,17 +376,43 @@ func (c Chat) View() string {
 		statusMsg = "Streaming response... Please wait"
 	}
 
-	// Create the layout with viewport for messages
-	layout := lipgloss.JoinVertical(
-		lipgloss.Left,
-		lipgloss.NewStyle().Width(width).Align(lipgloss.Center).Render("LLM Chat TUI"),
-		"",
-		c.Viewport.View(), // Use viewport for scrollable messages
-		"",
-		lipgloss.NewStyle().Width(width).Align(lipgloss.Center).Render(c.TextInput.View()),
-		"",
-		lipgloss.NewStyle().Width(width).Align(lipgloss.Center).Render(statusMsg),
-	)
+	// Check if there are any messages (excluding streaming state)
+	hasMessages := len(c.Messages) > 0
+
+	var layout string
+	if !hasMessages {
+		// Center the input when no messages exist
+		// Calculate vertical centering
+		availableHeight := height - 6 // Account for title, input, status, and spacing
+		topPadding := availableHeight / 2
+
+		var topSpacing []string
+		for i := 0; i < topPadding; i++ {
+			topSpacing = append(topSpacing, "")
+		}
+
+		layout = lipgloss.JoinVertical(
+			lipgloss.Left,
+			lipgloss.NewStyle().Width(width).Align(lipgloss.Center).Render("LLM Chat TUI"),
+			"",
+			strings.Join(topSpacing, "\n"),
+			lipgloss.NewStyle().Width(width).Align(lipgloss.Center).Render(c.TextInput.View()),
+			"",
+			lipgloss.NewStyle().Width(width).Align(lipgloss.Center).Render(statusMsg),
+		)
+	} else {
+		// Keep input at bottom when messages exist
+		layout = lipgloss.JoinVertical(
+			lipgloss.Left,
+			lipgloss.NewStyle().Width(width).Align(lipgloss.Center).Render("LLM Chat TUI"),
+			"",
+			c.Viewport.View(), // Use viewport for scrollable messages
+			"",
+			lipgloss.NewStyle().Width(width).Align(lipgloss.Center).Render(c.TextInput.View()),
+			"",
+			lipgloss.NewStyle().Width(width).Align(lipgloss.Center).Render(statusMsg),
+		)
+	}
 
 	return layout
 }
