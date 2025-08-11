@@ -10,4 +10,8 @@ run:
 vet:
 	go vet
 
+clean:
+	go clean -cache
+	rm llm-chat-tui
+
 build-and-run: build run

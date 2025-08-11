@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
@@ -62,6 +63,7 @@ type Chat struct {
 	Client         openai.Client
 	TextInput      textinput.Model
 	Viewport       viewport.Model
+	Spinner        spinner.Model
 	Width          int
 	Height         int
 	isStreaming    bool
@@ -92,10 +94,16 @@ func main() {
 	// Initialize viewport with welcome content
 	vp := viewport.New(80, 20)
 
+	// Initialize spinner
+	s := spinner.New()
+	s.Spinner = spinner.Dot
+	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("205"))
+
 	chat := Chat{
 		Client:         client,
 		TextInput:      ti,
 		Viewport:       vp,
+		Spinner:        s,
 		isStreaming:    false,
 		currentMessage: &strings.Builder{},
 	}
@@ -371,7 +379,7 @@ func (c *Chat) handleStreamErrorMsg(msg streamErrorMsg) (Chat, tea.Cmd) {
 }
 
 func (c Chat) Init() tea.Cmd {
-	return nil
+	return c.Spinner.Tick
 }
 
 func (c Chat) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -394,10 +402,18 @@ func (c Chat) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return chatPtr.handleStreamErrorMsg(msg)
 	}
 
+	// Always update spinner (but only display when streaming)
+	var cmds []tea.Cmd
+	var spinnerCmd tea.Cmd
+	c.Spinner, spinnerCmd = c.Spinner.Update(msg)
+	cmds = append(cmds, spinnerCmd)
+
 	// For non-key messages (like window resize), always update the text input
 	var cmd tea.Cmd
 	c.TextInput, cmd = c.TextInput.Update(msg)
-	return c, cmd
+	cmds = append(cmds, cmd)
+
+	return c, tea.Batch(cmds...)
 }
 
 func (c Chat) View() string {
@@ -411,11 +427,8 @@ func (c Chat) View() string {
 		height = 24
 	}
 
-	// Create status message based on streaming state
+	// Create status message (always the same regardless of streaming state)
 	statusMsg := "Press Enter to send, Ctrl+C to quit • Use ↑/↓ or Page Up/Down to scroll with mouse wheel"
-	if c.isStreaming {
-		statusMsg = "Streaming response... Please wait"
-	}
 
 	// Check if there are any messages (excluding streaming state)
 	hasMessages := len(c.Messages) > 0
@@ -425,6 +438,9 @@ func (c Chat) View() string {
 		// Center the input when no messages exist
 		// Calculate vertical centering
 		availableHeight := height - 6 // Account for title, input, status, and spacing
+		if c.isStreaming {
+			availableHeight -= 2 // Account for spinner
+		}
 		topPadding := availableHeight / 2
 
 		var topSpacing []string
@@ -432,27 +448,59 @@ func (c Chat) View() string {
 			topSpacing = append(topSpacing, "")
 		}
 
-		layout = lipgloss.JoinVertical(
-			lipgloss.Left,
-			lipgloss.NewStyle().Width(width).Align(lipgloss.Center).MarginTop(1).Render("LLM Chat TUI"),
-			"",
-			strings.Join(topSpacing, "\n"),
-			lipgloss.NewStyle().Width(width).Align(lipgloss.Center).Render(c.TextInput.View()),
-			"",
-			lipgloss.NewStyle().Width(width).Align(lipgloss.Center).MarginBottom(1).Render(statusMsg),
-		)
+		var layoutComponents []string
+		layoutComponents = append(layoutComponents, lipgloss.NewStyle().Width(width).Align(lipgloss.Center).MarginTop(1).Render("LLM Chat TUI"))
+		layoutComponents = append(layoutComponents, "")
+		layoutComponents = append(layoutComponents, strings.Join(topSpacing, "\n"))
+
+		// Add spinner above input if streaming
+		if c.isStreaming {
+			spinnerText := c.Spinner.View() + " Typing..."
+			// Calculate padding to align spinner with left edge of input text
+			inputWidth := min(width-4, 80) // Same calculation as TextInput width
+			leftPadding := (width - inputWidth) / 2
+			spinnerStyled := lipgloss.NewStyle().
+				Width(width).
+				PaddingLeft(leftPadding).
+				Align(lipgloss.Left).
+				Render(spinnerText)
+			layoutComponents = append(layoutComponents, spinnerStyled)
+			layoutComponents = append(layoutComponents, "")
+		}
+
+		layoutComponents = append(layoutComponents, lipgloss.NewStyle().Width(width).Align(lipgloss.Center).Render(c.TextInput.View()))
+		layoutComponents = append(layoutComponents, "")
+		layoutComponents = append(layoutComponents, lipgloss.NewStyle().Width(width).Align(lipgloss.Center).MarginBottom(1).Render(statusMsg))
+
+		layout = lipgloss.JoinVertical(lipgloss.Left, layoutComponents...)
 	} else {
 		// Keep input at bottom when messages exist
-		layout = lipgloss.JoinVertical(
-			lipgloss.Left,
-			lipgloss.NewStyle().Width(width).Align(lipgloss.Center).MarginTop(1).Render("LLM Chat TUI"),
-			"",
-			c.Viewport.View(), // Use viewport for scrollable messages
-			"",
-			lipgloss.NewStyle().Width(width).Align(lipgloss.Center).Render(c.TextInput.View()),
-			"",
-			lipgloss.NewStyle().Width(width).Align(lipgloss.Center).MarginBottom(1).Render(statusMsg),
-		)
+		var layoutComponents []string
+		layoutComponents = append(layoutComponents, lipgloss.NewStyle().Width(width).Align(lipgloss.Center).MarginTop(1).Render("LLM Chat TUI"))
+		layoutComponents = append(layoutComponents, "")
+		layoutComponents = append(layoutComponents, c.Viewport.View()) // Use viewport for scrollable messages
+		layoutComponents = append(layoutComponents, "")
+
+		// Add spinner above input if streaming
+		if c.isStreaming {
+			spinnerText := c.Spinner.View() + " Typing..."
+			// Calculate padding to align spinner with left edge of input text
+			inputWidth := min(width-4, 80) // Same calculation as TextInput width
+			leftPadding := (width - inputWidth) / 2
+			spinnerStyled := lipgloss.NewStyle().
+				Width(width).
+				PaddingLeft(leftPadding).
+				Align(lipgloss.Left).
+				Render(spinnerText)
+			layoutComponents = append(layoutComponents, spinnerStyled)
+			layoutComponents = append(layoutComponents, "")
+		}
+
+		layoutComponents = append(layoutComponents, lipgloss.NewStyle().Width(width).Align(lipgloss.Center).Render(c.TextInput.View()))
+		layoutComponents = append(layoutComponents, "")
+		layoutComponents = append(layoutComponents, lipgloss.NewStyle().Width(width).Align(lipgloss.Center).MarginBottom(1).Render(statusMsg))
+
+		layout = lipgloss.JoinVertical(lipgloss.Left, layoutComponents...)
 	}
 
 	return layout
