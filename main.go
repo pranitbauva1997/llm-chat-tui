@@ -195,10 +195,8 @@ func (c Chat) renderMessages() string {
 		// Style messages based on role
 		switch msg.Role {
 		case RoleUser:
-			// User messages on the right (blue background)
+			// User messages on the right
 			userStyle := lipgloss.NewStyle().
-				Background(lipgloss.Color("4")).
-				Foreground(lipgloss.Color("15")).
 				Padding(0, 1).
 				MarginRight(2).
 				Width(len(messageText) + 2).
@@ -218,10 +216,8 @@ func (c Chat) renderMessages() string {
 				Render(rightAligned)
 			messageLines = append(messageLines, centeredMessage)
 		case RoleAssistant:
-			// Assistant messages on the left (gray background)
+			// Assistant messages on the left
 			assistantStyle := lipgloss.NewStyle().
-				Background(lipgloss.Color("8")).
-				Foreground(lipgloss.Color("15")).
 				Padding(0, 1).
 				MarginLeft(2).
 				Width(len(messageText) + 2).
@@ -255,10 +251,8 @@ func (c Chat) renderMessages() string {
 			streamingText += "▋" // Add cursor to show it's streaming
 		}
 
-		// Assistant messages on the left (gray background) with streaming indicator
+		// Assistant messages on the left with streaming indicator
 		assistantStyle := lipgloss.NewStyle().
-			Background(lipgloss.Color("8")).
-			Foreground(lipgloss.Color("15")).
 			Padding(0, 1).
 			MarginLeft(2).
 			Width(len(streamingText) + 2).
@@ -307,7 +301,7 @@ func (c *Chat) handleWindowSizeMsg(msg tea.WindowSizeMsg) (Chat, tea.Cmd) {
 	c.Width = msg.Width
 	c.Height = msg.Height
 	c.TextInput.Width = min(c.Width-4, 80)
-	viewportHeight := c.Height - 9
+	viewportHeight := c.Height - 13 // Account for borders on title and input (4 extra lines)
 	c.Viewport.Width = c.Width
 	c.Viewport.Height = viewportHeight
 	return *c, nil
@@ -449,7 +443,14 @@ func (c Chat) View() string {
 		}
 
 		var layoutComponents []string
-		layoutComponents = append(layoutComponents, lipgloss.NewStyle().Width(width).Align(lipgloss.Center).MarginTop(1).Render("LLM Chat TUI"))
+		titleStyle := lipgloss.NewStyle().
+			Bold(true).
+			Border(lipgloss.RoundedBorder()).
+			Padding(0, 2).
+			Align(lipgloss.Center)
+		title := titleStyle.Render("LLM Chat TUI")
+		centeredTitle := lipgloss.NewStyle().Width(width).Align(lipgloss.Center).MarginTop(1).Render(title)
+		layoutComponents = append(layoutComponents, centeredTitle)
 		layoutComponents = append(layoutComponents, "")
 		layoutComponents = append(layoutComponents, strings.Join(topSpacing, "\n"))
 
@@ -468,7 +469,11 @@ func (c Chat) View() string {
 			layoutComponents = append(layoutComponents, "")
 		}
 
-		layoutComponents = append(layoutComponents, lipgloss.NewStyle().Width(width).Align(lipgloss.Center).Render(c.TextInput.View()))
+		inputStyle := lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			Padding(0, 1)
+		styledInput := inputStyle.Render(c.TextInput.View())
+		layoutComponents = append(layoutComponents, lipgloss.NewStyle().Width(width).Align(lipgloss.Center).Render(styledInput))
 		layoutComponents = append(layoutComponents, "")
 		layoutComponents = append(layoutComponents, lipgloss.NewStyle().Width(width).Align(lipgloss.Center).MarginBottom(1).Render(statusMsg))
 
@@ -476,7 +481,14 @@ func (c Chat) View() string {
 	} else {
 		// Keep input at bottom when messages exist
 		var layoutComponents []string
-		layoutComponents = append(layoutComponents, lipgloss.NewStyle().Width(width).Align(lipgloss.Center).MarginTop(1).Render("LLM Chat TUI"))
+		titleStyle := lipgloss.NewStyle().
+			Bold(true).
+			Border(lipgloss.RoundedBorder()).
+			Padding(0, 2).
+			Align(lipgloss.Center)
+		title := titleStyle.Render("LLM Chat TUI")
+		centeredTitle := lipgloss.NewStyle().Width(width).Align(lipgloss.Center).MarginTop(1).Render(title)
+		layoutComponents = append(layoutComponents, centeredTitle)
 		layoutComponents = append(layoutComponents, "")
 		layoutComponents = append(layoutComponents, c.Viewport.View()) // Use viewport for scrollable messages
 		layoutComponents = append(layoutComponents, "")
@@ -496,7 +508,11 @@ func (c Chat) View() string {
 			layoutComponents = append(layoutComponents, "")
 		}
 
-		layoutComponents = append(layoutComponents, lipgloss.NewStyle().Width(width).Align(lipgloss.Center).Render(c.TextInput.View()))
+		inputStyle := lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			Padding(0, 1)
+		styledInput := inputStyle.Render(c.TextInput.View())
+		layoutComponents = append(layoutComponents, lipgloss.NewStyle().Width(width).Align(lipgloss.Center).Render(styledInput))
 		layoutComponents = append(layoutComponents, "")
 		layoutComponents = append(layoutComponents, lipgloss.NewStyle().Width(width).Align(lipgloss.Center).MarginBottom(1).Render(statusMsg))
 
