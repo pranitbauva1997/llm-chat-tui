@@ -299,7 +299,7 @@ func (c *Chat) handleWindowSizeMsg(msg tea.WindowSizeMsg) (Chat, tea.Cmd) {
 	c.Width = msg.Width
 	c.Height = msg.Height
 	c.TextInput.Width = min(c.Width-4, 80)
-	viewportHeight := c.Height - 6
+	viewportHeight := c.Height - 9
 	c.Viewport.Width = c.Width
 	c.Viewport.Height = viewportHeight
 	return *c, nil
@@ -434,24 +434,24 @@ func (c Chat) View() string {
 
 		layout = lipgloss.JoinVertical(
 			lipgloss.Left,
-			lipgloss.NewStyle().Width(width).Align(lipgloss.Center).Render("LLM Chat TUI"),
+			lipgloss.NewStyle().Width(width).Align(lipgloss.Center).MarginTop(1).Render("LLM Chat TUI"),
 			"",
 			strings.Join(topSpacing, "\n"),
 			lipgloss.NewStyle().Width(width).Align(lipgloss.Center).Render(c.TextInput.View()),
 			"",
-			lipgloss.NewStyle().Width(width).Align(lipgloss.Center).Render(statusMsg),
+			lipgloss.NewStyle().Width(width).Align(lipgloss.Center).MarginBottom(1).Render(statusMsg),
 		)
 	} else {
 		// Keep input at bottom when messages exist
 		layout = lipgloss.JoinVertical(
 			lipgloss.Left,
-			lipgloss.NewStyle().Width(width).Align(lipgloss.Center).Render("LLM Chat TUI"),
+			lipgloss.NewStyle().Width(width).Align(lipgloss.Center).MarginTop(1).Render("LLM Chat TUI"),
 			"",
 			c.Viewport.View(), // Use viewport for scrollable messages
 			"",
 			lipgloss.NewStyle().Width(width).Align(lipgloss.Center).Render(c.TextInput.View()),
 			"",
-			lipgloss.NewStyle().Width(width).Align(lipgloss.Center).Render(statusMsg),
+			lipgloss.NewStyle().Width(width).Align(lipgloss.Center).MarginBottom(1).Render(statusMsg),
 		)
 	}
 
