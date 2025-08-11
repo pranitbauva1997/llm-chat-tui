@@ -299,6 +299,10 @@ func (c Chat) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				// Set streaming state and send to OpenAI
 				c.isStreaming = true
 				c.currentMessage.Reset()
+				// Update viewport to show streaming indicator immediately
+				content = c.renderMessages()
+				c.Viewport.SetContent(content)
+				c.Viewport.GotoBottom()
 				return c, c.sendMessage()
 			}
 			return c, nil
@@ -331,12 +335,12 @@ func (c Chat) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				Content: c.currentMessage.String(),
 			})
 			c.currentMessage.Reset()
-			// Update viewport content immediately
-			content := c.renderMessages()
-			c.Viewport.SetContent(content)
-			c.Viewport.GotoBottom()
 		}
 		c.isStreaming = false
+		// Update viewport content immediately to clear streaming indicator
+		content := c.renderMessages()
+		c.Viewport.SetContent(content)
+		c.Viewport.GotoBottom()
 		// Re-focus the text input after streaming is complete
 		return c, c.TextInput.Focus()
 	case streamErrorMsg:
