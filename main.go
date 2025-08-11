@@ -193,12 +193,12 @@ func (c Chat) View() string {
 			lipgloss.JoinVertical(lipgloss.Left, messageLines...),
 		)
 
-		// Layout with messages at top, input at bottom
+		// Layout with title at top, messages in middle, input at bottom
 		content = lipgloss.JoinVertical(
 			lipgloss.Left,
-			messageHistory,
-			"",
 			lipgloss.NewStyle().Width(width).Align(lipgloss.Center).Render("LLM Chat TUI"),
+			"",
+			messageHistory,
 			"",
 			lipgloss.NewStyle().Width(width).Align(lipgloss.Center).Render(c.TextInput.View()),
 			"",
