@@ -18,8 +18,26 @@ type Secrets struct {
 	OpenaiApiKey string
 }
 
+type Role int
+
+const (
+	RoleUser Role = iota
+	RoleAssistant
+)
+
+func (r Role) String() string {
+	switch r {
+	case RoleUser:
+		return "user"
+	case RoleAssistant:
+		return "assistant"
+	default:
+		return "unknown"
+	}
+}
+
 type ChatMessages struct {
-	Role    string
+	Role    Role
 	Content string
 }
 
@@ -101,9 +119,10 @@ func (c *Chat) startStreaming() tea.Cmd {
 		// Convert ChatMessages to OpenAI format
 		var messages []openai.ChatCompletionMessageParamUnion
 		for _, msg := range c.Messages {
-			if msg.Role == "user" {
+			switch msg.Role {
+			case RoleUser:
 				messages = append(messages, openai.UserMessage(msg.Content))
-			} else if msg.Role == "assistant" {
+			case RoleAssistant:
 				messages = append(messages, openai.AssistantMessage(msg.Content))
 			}
 		}
@@ -166,7 +185,8 @@ func (c Chat) renderMessages() string {
 		messageText := msg.Content
 
 		// Style messages based on role
-		if msg.Role == "user" {
+		switch msg.Role {
+		case RoleUser:
 			// User messages on the right (blue background)
 			userStyle := lipgloss.NewStyle().
 				Background(lipgloss.Color("4")).
@@ -189,7 +209,7 @@ func (c Chat) renderMessages() string {
 				PaddingLeft(leftPadding).
 				Render(rightAligned)
 			messageLines = append(messageLines, centeredMessage)
-		} else if msg.Role == "assistant" {
+		case RoleAssistant:
 			// Assistant messages on the left (gray background)
 			assistantStyle := lipgloss.NewStyle().
 				Background(lipgloss.Color("8")).
@@ -264,7 +284,7 @@ func (c *Chat) updateViewportContent() {
 
 func (c *Chat) sendUserMessage(inputValue string) tea.Cmd {
 	c.Messages = append(c.Messages, ChatMessages{
-		Role:    "user",
+		Role:    RoleUser,
 		Content: inputValue,
 	})
 	c.updateViewportContent()
@@ -331,7 +351,7 @@ func (c *Chat) handleStreamChunkMsg(msg streamChunkMsg) (Chat, tea.Cmd) {
 func (c *Chat) handleStreamCompleteMsg(msg streamCompleteMsg) (Chat, tea.Cmd) {
 	if c.currentMessage.Len() > 0 {
 		c.Messages = append(c.Messages, ChatMessages{
-			Role:    "assistant",
+			Role:    RoleAssistant,
 			Content: c.currentMessage.String(),
 		})
 		c.currentMessage.Reset()
@@ -343,7 +363,7 @@ func (c *Chat) handleStreamCompleteMsg(msg streamCompleteMsg) (Chat, tea.Cmd) {
 
 func (c *Chat) handleStreamErrorMsg(msg streamErrorMsg) (Chat, tea.Cmd) {
 	c.Messages = append(c.Messages, ChatMessages{
-		Role:    "assistant",
+		Role:    RoleAssistant,
 		Content: fmt.Sprintf("Error: %v", msg.err),
 	})
 	c.isStreaming = false
