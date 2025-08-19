@@ -89,7 +89,7 @@ func main() {
 	ti := textinput.New()
 	ti.Placeholder = "Type your message here..."
 	ti.Focus()
-	ti.CharLimit = 500
+	ti.CharLimit = 10000
 	ti.Width = 50
 
 	// Initialize viewport with welcome content
