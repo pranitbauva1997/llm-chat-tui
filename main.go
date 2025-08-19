@@ -11,9 +11,9 @@ import (
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/openai/openai-go"
-	openai_option "github.com/openai/openai-go/option"
-	"github.com/openai/openai-go/packages/ssestream"
+	"github.com/openai/openai-go/v2"
+	openai_option "github.com/openai/openai-go/v2/option"
+	"github.com/openai/openai-go/v2/packages/ssestream"
 )
 
 type Secrets struct {
@@ -139,7 +139,7 @@ func (c *Chat) startStreaming() tea.Cmd {
 		// Create streaming chat completion request
 		stream := c.Client.Chat.Completions.NewStreaming(context.Background(), openai.ChatCompletionNewParams{
 			Messages: messages,
-			Model:    openai.ChatModelGPT4oMini,
+			Model:    openai.ChatModelGPT5ChatLatest,
 		})
 
 		// Get the first chunk and trigger streaming loop
